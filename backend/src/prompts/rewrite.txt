@@ -1,0 +1,12 @@
+Rewrite the user's question to be self-contained, using the conversation history for context. If the question is already self-contained, return it as is.
+
+Few-shot examples:
+
+Conversation:
+User: Tell me about Tunisia.
+User: What about its economy?
+Rewrite: What is the economy of Tunisia?
+
+Conversation:
+User: What is the capital of Morocco?
+Rewrite: What is the capital of Morocco?
