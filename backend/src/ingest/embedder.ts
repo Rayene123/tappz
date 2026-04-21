@@ -1,22 +1,27 @@
-import axios from 'axios';
+import { google } from '@ai-sdk/google';
+import { embedMany, embed } from 'ai';
+
+const embeddingModel = google.textEmbeddingModel('text-embedding-004');
 
 /**
- * Generates an embedding vector for a given text using OpenAI API.
- * Replace with Ollama or other provider if needed.
+ * Generates an embedding for a single text string.
  */
 export async function embedText(text: string): Promise<number[]> {
-  const apiKey = process.env.OPENAI_API_KEY;
-  const response = await axios.post(
-    'https://api.openai.com/v1/embeddings',
-    {
-      input: text,
-      model: 'text-embedding-3-small', // or your chosen model
-    },
-    {
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-      },
-    }
-  );
-  return response.data.data[0].embedding;
+  const { embedding } = await embed({
+    model: embeddingModel,
+    value: text,
+  });
+  return embedding;
+}
+
+/**
+ * Generates embeddings for multiple texts in a single batch call.
+ * More efficient for ingestion pipelines.
+ */
+export async function embedBatch(texts: string[]): Promise<number[][]> {
+  const { embeddings } = await embedMany({
+    model: embeddingModel,
+    values: texts,
+  });
+  return embeddings;
 }

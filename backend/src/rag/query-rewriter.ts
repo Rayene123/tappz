@@ -1,21 +1,42 @@
-// src/rag/query-rewriter.ts
-
-import { generateText } from '../utils/llm';
+import { generateText } from 'ai';
+import { google } from '@ai-sdk/google';
+import { loadPrompt } from '../utils/prompts';
+import { logger } from '../utils/logger';
 
 /**
- * Rewrites a user query to be self-contained using conversation history.
+ * Rewrites a potentially ambiguous user query into a self-contained question
+ * using conversation history for context resolution.
+ * E.g., "What about its economy?" → "What is the economy of Tunisia?"
  */
 export async function rewriteQuery(query: string, history: string[]): Promise<string> {
-  const prompt = `
-Rewrite the following user query to be self-contained, using the conversation history for context.
+  // Skip rewriting if no history or query is already long/specific
+  if (history.length === 0 || query.split(' ').length > 8) {
+    return query;
+  }
+
+  const rewritePrompt = loadPrompt('rewrite');
+
+  const prompt = `${rewritePrompt}
 
 Conversation:
 ${history.join('\n')}
+User: ${query}
 
-Query:
-${query}
+Rewritten Query:`;
 
-Rewritten Query:
-`;
-  return (await generateText(prompt)).trim();
+  try {
+    const { text } = await generateText({
+      model: google('gemini-2.0-flash'),
+      prompt,
+      maxTokens: 100,
+    });
+    const rewritten = text.trim();
+    if (rewritten && rewritten !== query) {
+      logger.debug(`Query rewritten: "${query}" → "${rewritten}"`);
+    }
+    return rewritten || query;
+  } catch (err) {
+    logger.error('Query rewrite failed, using original:', err);
+    return query;
+  }
 }

@@ -1,29 +1,33 @@
 {
-  "name": "backend",
+  "name": "tappz-rag-backend",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "description": "Document Q&A Agent with RAG and Evaluation",
+  "main": "dist/main.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/main.js",
+    "start:dev": "ts-node --project tsconfig.json src/main.ts",
+    "ingest": "ts-node --project tsconfig.json src/ingest/run-ingest.ts",
+    "evaluate": "ts-node --project tsconfig.json src/evaluation/run-evaluate.ts"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "packageManager": "pnpm@10.33.0",
   "dependencies": {
+    "@ai-sdk/google": "^1.0.0",
     "@nestjs/common": "^11.1.19",
     "@nestjs/core": "^11.1.19",
     "@nestjs/platform-fastify": "^11.1.19",
-    "ai": "^6.0.168",
+    "@qdrant/js-client-rest": "^1.13.0",
+    "ai": "^4.3.16",
     "axios": "^1.15.2",
-    "qdrant-client": "^0.0.1",
+    "dotenv": "^16.0.0",
+    "fastify": "^5.0.0",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.2",
-    "zod": "^4.3.6"
+    "zod": "^3.25.76"
   },
   "devDependencies": {
-    "@types/node": "^25.6.0",
+    "@types/node": "^20.0.0",
     "ts-node": "^10.9.2",
-    "typescript": "^6.0.3"
+    "tsconfig-paths": "^4.2.0",
+    "typescript": "^5.4.0"
   }
 }
