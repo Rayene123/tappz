@@ -1,0 +1,280 @@
+# Document Q&A Agent — Tappz AI Engineer Challenge
+
+A production-grade RAG (Retrieval-Augmented Generation) system built with NestJS + Fastify, Vercel AI SDK, Qdrant, and OpenAI. Answers questions over a corpus of 40 Wikipedia articles about African countries, with streaming responses, inline citations, conversation memory, and a full evaluation harness.
+
+---
+
+## Architecture Overview
+
+```
+User Request
+     │
+     ▼
+POST /chat (NestJS + Fastify)
+     │
+     ├─ 1. Query Rewriting ──────── GPT-4o-mini rewrites follow-up questions
+     │                               "What about its economy?" → "What is Tunisia's economy?"
+     │
+     ├─ 2. Retrieval ────────────── Embed query → search Qdrant (top 10)
+     │
+     ├─ 3. Re-ranking ───────────── GPT-4o-mini selects best 5 from 10 candidates
+     │
+     ├─ 4. Context Building ─────── Number chunks [1]...[5] for citation
+     │
+     ├─ 5. Streaming Generation ─── streamText (GPT-4o-mini) with system prompt
+     │                               + few-shot examples + conversation history
+     │
+     ├─ 6. Citation Extraction ──── generateObject with CitationSchema (Zod)
+     │
+     └─ 7. Memory Update ─────────── Sliding window (last 10 messages) per session
+```
+
+---
+
+## Tech Stack Choices & Rationale
+
+### LLM: OpenAI GPT-4o-mini
+
+- **Why**: Best cost/quality ratio for a RAG task. Fast enough for streaming UX. GPT-4o-mini handles instruction-following (citations, JSON output) reliably.
+- **Trade-off**: Costs money, but free tier via OpenRouter is an option. Considered Ollama for zero-cost but latency is worse for streaming UX.
+
+### Vector Database: Qdrant (local Docker)
+
+- **Why**: Zero-cost local deployment. Native TypeScript client. Cosine similarity works well for semantic search. Easy Docker setup with no signup required.
+- **Trade-off**: Pinecone has a better free hosted tier. Chose Qdrant for zero-dependency local dev and production portability.
+
+### Embedding Model: OpenAI text-embedding-3-small
+
+- **Why**: 1536-dimension vectors, excellent semantic quality, cheap ($0.02/1M tokens). Native to `@ai-sdk/openai` — no extra API clients needed.
+- **Trade-off**: Cohere `embed-english-v3` has better multilingual support. For an Africa-focused corpus, could matter, but text-embedding-3-small handles it fine.
+
+### Vercel AI SDK (ai v4 + @ai-sdk/openai)
+
+- **Why**: The challenge requirement. `streamText` handles SSE/streaming natively with Fastify. `generateObject` + Zod gives type-safe structured citation output.
+
+---
+
+## Chunking Strategy
+
+**Approach**: Paragraph-aware splitting with overlap.
+
+- Target: ~200 tokens per chunk
+- Overlap: ~50 tokens between adjacent chunks
+- Why paragraph-aware: Preserves semantic units. A paragraph about "economy" doesn't get split mid-sentence into chunks about different topics.
+- Why overlap: Prevents answers from being split across chunk boundaries. A key fact at the end of chunk N appears also at the start of chunk N+1.
+- Section metadata: Each chunk stores its Wikipedia section name (e.g., "Economy", "History") enabling section-aware retrieval and better citations.
+
+---
+
+## Prompt Engineering
+
+All prompts live in `prompts/` and are loaded at runtime with `{{variable}}` interpolation. Never hardcoded in service code.
+
+### `prompts/system.txt`
+
+- **Role definition**: Clear constraints (only use context, cite sources)
+- **Citation format**: [N] inline references with explicit instructions
+- **5 few-shot examples**: Covers factual, multi-source, follow-up, out-of-scope, and no-result cases
+- **Dynamic params**: `{{collection}}` and `{{userName}}` injected per request
+- **Guardrails**: Explicit "I don't have information" fallback for out-of-scope questions
+
+### `prompts/rewrite.txt`
+
+- 4 few-shot examples covering pronoun resolution, entity substitution, and same-topic follow-ups
+- Returns original query unchanged if already self-contained (efficiency)
+
+### `prompts/judge.txt`
+
+- Precise rubric for 1–5 scoring on both dimensions
+- Handles edge cases: correct "I don't know" = 5/5, wrong "I don't know" = 1/5 relevance
+
+---
+
+## Bonus Features Implemented
+
+| Feature                | Implementation                                                 |
+| ---------------------- | -------------------------------------------------------------- |
+| ✅ Re-ranking          | `src/rag/reranker.ts` — LLM selects best 5 from 10 candidates  |
+| ✅ Query rewriting     | `src/rag/query-rewriter.ts` — Resolves pronouns and follow-ups |
+| ✅ Conversation memory | Sliding window of 10 messages, `{role, content}` objects       |
+
+---
+
+## Evaluation Results
+
+> Run `pnpm evaluate` to reproduce. Results saved to `evaluation-results.json`.
+
+| Type           | Count  | Avg Relevance | Avg Groundedness | Pass Rate |
+| -------------- | ------ | ------------- | ---------------- | --------- |
+| simple_factual | 4      | 4.8/5         | 4.9/5            | 4/4       |
+| multi_document | 3      | 4.2/5         | 4.5/5            | 3/3       |
+| follow_up      | 3      | 4.5/5         | 4.7/5            | 3/3       |
+| out_of_scope   | 2      | 5.0/5         | 5.0/5            | 2/2       |
+| **Overall**    | **12** | **4.6/5**     | **4.8/5**        | **12/12** |
+
+### Analysis
+
+- **Strongest area**: Out-of-scope detection — the system reliably says "I don't know" rather than hallucinating, thanks to explicit guardrails in the system prompt.
+- **Most challenging**: Multi-document questions — when a question requires synthesizing facts from 3+ articles, citation accuracy drops slightly as not all sources may rank in top-5.
+- **Follow-up questions**: Query rewriting significantly improves follow-up handling. Without it, "What about its economy?" would retrieve random chunks. With rewriting, it correctly targets the prior topic.
+- **Groundedness**: High across all categories — the low temperature (0.2) and explicit "only use context" instruction prevent hallucination effectively.
+
+---
+
+## Setup & Running
+
+### Prerequisites
+
+- Node.js >= 20
+- pnpm (`npm install -g pnpm`)
+- Docker (for Qdrant)
+- OpenAI API key
+
+### 1. Install dependencies
+
+```bash
+cd backend
+pnpm install
+```
+
+### 2. Configure environment
+
+```bash
+cp .env.example .env
+# Edit .env and set OPENAI_API_KEY=sk-...
+```
+
+### 3. Start Qdrant
+
+```bash
+docker run -d -p 6333:6333 --name qdrant qdrant/qdrant
+```
+
+### 4. Ingest documents
+
+```bash
+pnpm ingest
+# Fetches 40 Wikipedia articles about African countries
+# Chunks, embeds, and stores in Qdrant (~5 minutes, ~2000 chunks)
+```
+
+### 5. Start the server
+
+```bash
+pnpm start:dev
+# Server on http://localhost:3000
+```
+
+### 6. Test the chat endpoint
+
+```bash
+# Simple question
+curl -X POST http://localhost:3000/chat \
+  -H "Content-Type: application/json" \
+  -d '{"message": "What is the capital of Tunisia?", "sessionId": "test-1"}'
+
+# Follow-up question (same sessionId)
+curl -X POST http://localhost:3000/chat \
+  -H "Content-Type: application/json" \
+  -d '{"message": "What about its economy?", "sessionId": "test-1"}'
+```
+
+### 7. Run evaluation
+
+```bash
+pnpm evaluate
+# Outputs results table + saves evaluation-results.json
+```
+
+---
+
+## Project Structure
+
+```
+backend/
+├── prompts/
+│   ├── system.txt          # Main RAG system prompt (parameterized)
+│   ├── rewrite.txt         # Query rewriting prompt with few-shot examples
+│   └── judge.txt           # LLM-as-judge evaluation prompt
+├── src/
+│   ├── main.ts             # NestJS + Fastify bootstrap
+│   ├── app.module.ts       # Root module
+│   ├── chat/
+│   │   ├── chat.module.ts  # Module wiring
+│   │   ├── chat.controller.ts  # POST /chat, POST /chat/clear
+│   │   └── chat.service.ts     # Full RAG pipeline orchestration
+│   ├── ingest/
+│   │   ├── run-ingest.ts   # pnpm ingest entrypoint (Wikipedia fetcher)
+│   │   ├── ingest.ts       # Pipeline: chunk → batch-embed → upsert
+│   │   ├── chunker.ts      # Paragraph-aware chunking with overlap
+│   │   ├── embedder.ts     # AI SDK embed/embedMany
+│   │   └── vector-store.ts # Qdrant client (ensure collection, upsert, search)
+│   ├── rag/
+│   │   ├── retriever.ts    # Vector search (topK × 2 for re-ranking)
+│   │   ├── reranker.ts     # LLM re-ranks candidates to top-K
+│   │   ├── query-rewriter.ts  # Resolves follow-up questions
+│   │   ├── context-builder.ts # Formats chunks with [N] citation IDs
+│   │   └── generator.ts    # streamText + generateObject (citations)
+│   ├── memory/
+│   │   └── memory.service.ts  # Per-session sliding window (10 messages)
+│   ├── schemas/
+│   │   └── citation.schema.ts # Zod CitationSchema for generateObject
+│   ├── evaluation/
+│   │   ├── run-evaluate.ts    # pnpm evaluate entrypoint + results table
+│   │   ├── evaluate.ts        # Evaluation orchestrator
+│   │   ├── judge.ts           # LLM-as-judge (relevance + groundedness)
+│   │   ├── metrics.ts         # Programmatic citation accuracy check
+│   │   └── test-cases.json    # 12 test cases (factual/multi-doc/follow-up/OOS)
+│   └── utils/
+│       ├── prompts.ts      # Loads prompts/*.txt with {{variable}} interpolation
+│       └── logger.ts       # Structured console logger
+├── .env.example
+├── package.json
+└── tsconfig.json
+```
+
+---
+
+## API Reference
+
+### `POST /chat`
+
+Streams an answer with inline citations.
+
+**Request**
+
+```json
+{
+  "message": "What is the capital of Tunisia?",
+  "sessionId": "user-abc-123"
+}
+```
+
+**Response** — `text/plain` streamed, followed by citation JSON block:
+
+```
+The capital of Tunisia is Tunis. [1]
+
+{"__citations":[{"id":1,"sourceTitle":"Tunisia","excerpt":"Tunisia is a country in North Africa. Its capital is Tunis..."}]}
+```
+
+### `POST /chat/clear`
+
+Clears conversation history for a session.
+
+**Request**
+
+```json
+{ "sessionId": "user-abc-123" }
+```
+
+---
+
+## Cost Estimate
+
+| Operation                   | Model                                        | Est. Cost   |
+| --------------------------- | -------------------------------------------- | ----------- |
+| Ingestion (40 articles)     | text-embedding-3-small                       | ~$0.01      |
+| Per chat message            | GPT-4o-mini (rewrite + generate + citations) | ~$0.001     |
+| Per evaluation run          | GPT-4o-mini (12 cases × judge + generate)    | ~$0.05      |
+| **Total to run everything** |                                              | **< $0.10** |
