@@ -1,23 +1,13 @@
-// src/rag/retriever.ts
-
 import { embedText } from '../ingest/embedder';
-import axios from 'axios';
-
-const QDRANT_URL = process.env.QDRANT_URL || 'http://localhost:6333';
-const COLLECTION = process.env.QDRANT_COLLECTION || 'countries';
+import { searchChunks, ChunkPayload } from '../ingest/vector-store';
 
 /**
  * Retrieves top-K relevant chunks from Qdrant for a query.
+ * Fetches more than needed (topK * 2) for re-ranking.
  */
-export async function retrieveChunks(query: string, topK = 10) {
+export async function retrieveChunks(query: string, topK = 5): Promise<ChunkPayload[]> {
   const embedding = await embedText(query);
-  const response = await axios.post(`${QDRANT_URL}/collections/${COLLECTION}/points/search`, {
-    vector: embedding,
-    limit: topK,
-    with_payload: true,
-  });
-  return response.data.result.map((item: any) => ({
-    ...item.payload,
-    id: item.id,
-  }));
+  // Fetch 2x for re-ranking headroom
+  const results = await searchChunks(embedding, topK * 2);
+  return results;
 }
