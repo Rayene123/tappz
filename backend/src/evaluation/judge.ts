@@ -1,7 +1,7 @@
 import { generateText } from 'ai';
 import { google } from '@ai-sdk/google';
-import { loadPrompt } from '../utils/prompts';
-import { ChunkPayload } from '../ingest/vector-store';
+import { loadPrompt } from '../utils/prompts.js';
+import { ChunkPayload } from '../ingest/vector-store.js';
 
 export interface JudgeScores {
   relevance: number;
@@ -35,7 +35,7 @@ Score (relevance,groundedness):`;
 
   try {
     const { text } = await generateText({
-      model: google('gemini-2.0-flash'),
+      model: google('gemini-2.5-flash'),
       prompt,
       maxTokens: 10,
       temperature: 0,

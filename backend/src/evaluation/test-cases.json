@@ -1,0 +1,103 @@
+[
+  {
+    "id": 1,
+    "type": "simple_factual",
+    "question": "What is the capital of Tunisia?",
+    "expectedAnswer": "Tunis",
+    "expectedSources": ["Tunisia"],
+    "followUp": false
+  },
+  {
+    "id": 2,
+    "type": "simple_factual",
+    "question": "What languages are spoken in Morocco?",
+    "expectedAnswer": "Arabic and Amazigh (Berber)",
+    "expectedSources": ["Morocco"],
+    "followUp": false
+  },
+  {
+    "id": 3,
+    "type": "multi_document",
+    "question": "Compare the economies of Tunisia and Morocco.",
+    "expectedAnswer": "Both rely on tourism and agriculture",
+    "expectedSources": ["Tunisia", "Morocco"],
+    "followUp": false
+  },
+  {
+    "id": 4,
+    "type": "multi_document",
+    "question": "Which African countries border the Mediterranean Sea?",
+    "expectedAnswer": "Tunisia, Morocco, Algeria, Libya, Egypt",
+    "expectedSources": ["Tunisia", "Morocco", "Algeria", "Libya", "Egypt"],
+    "followUp": false
+  },
+  {
+    "id": 5,
+    "type": "follow_up",
+    "sessionId": "eval-followup-1",
+    "question": "Tell me about Egypt.",
+    "expectedAnswer": "Egypt is a country in North Africa",
+    "expectedSources": ["Egypt"],
+    "followUp": false
+  },
+  {
+    "id": 6,
+    "type": "follow_up",
+    "sessionId": "eval-followup-1",
+    "question": "What about its economy?",
+    "expectedAnswer": "tourism, petroleum, natural gas",
+    "expectedSources": ["Egypt"],
+    "followUp": true,
+    "dependsOn": 5
+  },
+  {
+    "id": 7,
+    "type": "follow_up",
+    "sessionId": "eval-followup-1",
+    "question": "How does that compare to Ethiopia?",
+    "expectedAnswer": "Ethiopia's economy",
+    "expectedSources": ["Ethiopia"],
+    "followUp": true,
+    "dependsOn": 6
+  },
+  {
+    "id": 8,
+    "type": "out_of_scope",
+    "question": "What is the capital of France?",
+    "expectedAnswer": "I don't have information",
+    "expectedSources": [],
+    "followUp": false
+  },
+  {
+    "id": 9,
+    "type": "out_of_scope",
+    "question": "What is 2+2?",
+    "expectedAnswer": "I don't have information",
+    "expectedSources": [],
+    "followUp": false
+  },
+  {
+    "id": 10,
+    "type": "simple_factual",
+    "question": "What is the population of Nigeria?",
+    "expectedAnswer": "over 200 million",
+    "expectedSources": ["Nigeria"],
+    "followUp": false
+  },
+  {
+    "id": 11,
+    "type": "multi_document",
+    "question": "What are the major religions practiced in East African countries like Kenya, Ethiopia, and Tanzania?",
+    "expectedAnswer": "Christianity, Islam",
+    "expectedSources": ["Kenya", "Ethiopia", "Tanzania"],
+    "followUp": false
+  },
+  {
+    "id": 12,
+    "type": "simple_factual",
+    "question": "What natural resources does South Africa have?",
+    "expectedAnswer": "gold, diamonds, platinum",
+    "expectedSources": ["South Africa"],
+    "followUp": false
+  }
+]

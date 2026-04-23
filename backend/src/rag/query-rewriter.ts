@@ -1,7 +1,7 @@
 import { generateText } from 'ai';
 import { google } from '@ai-sdk/google';
-import { loadPrompt } from '../utils/prompts';
-import { logger } from '../utils/logger';
+import { loadPrompt } from '../utils/prompts.js';
+import { logger } from '../utils/logger.js';
 
 /**
  * Rewrites a potentially ambiguous user query into a self-contained question
@@ -26,7 +26,7 @@ Rewritten Query:`;
 
   try {
     const { text } = await generateText({
-      model: google('gemini-2.0-flash'),
+      model: google('gflashemini-2.5-'),
       prompt,
       maxTokens: 100,
     });

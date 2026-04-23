@@ -1,15 +1,15 @@
 import { Injectable } from '@nestjs/common';
 import { FastifyReply } from 'fastify';
-import { generateCitations, streamAnswer } from '../rag/generator';
-import { retrieveChunks } from '../rag/retriever';
-import { rerankChunks } from '../rag/reranker';
-import { rewriteQuery } from '../rag/query-rewriter';
-import { buildContext } from '../rag/context-builder';
-import { MemoryService } from '../memory/memory.service';
-import { CitationSchema } from '../schemas/citation.schema';
-import { loadPrompt } from '../utils/prompts';
-import { logger } from '../utils/logger';
-import { ChunkPayload } from '../ingest/vector-store';
+import { generateCitations, streamAnswer } from '../rag/generator.js';
+import { retrieveChunks } from '../rag/retriever.js';
+import { rerankChunks } from '../rag/reranker.js';
+import { rewriteQuery } from '../rag/query-rewriter.js';
+import { buildContext } from '../rag/context-builder.js';
+import { MemoryService } from '../memory/memory.service.js';
+import { CitationSchema } from '../schemas/citation.schema.js';
+import { loadPrompt } from '../utils/prompts.js';
+import { logger } from '../utils/logger.js';
+import { ChunkPayload } from '../ingest/vector-store.js';
 import { z } from 'zod';
 
 export interface StreamChatOptions {

@@ -4,8 +4,8 @@
  */
 import 'dotenv/config';
 import axios from 'axios';
-import { ingestDocuments, Document } from './ingest';
-import { logger } from '../utils/logger';
+import { ingestDocuments, Document } from './ingest.js';
+import { logger } from '../utils/logger.js';
 
 const WIKIPEDIA_USER_AGENT =
   process.env.WIKIPEDIA_USER_AGENT ||

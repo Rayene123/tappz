@@ -1,0 +1,33 @@
+services:
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: qdrant
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant_data:/qdrant/storage
+    environment:
+      - QDRANT__SERVICE__HTTP_PORT=6333
+
+  qdrant-init:
+    image: curlimages/curl:latest
+    container_name: qdrant-init
+    depends_on:
+      - qdrant
+    restart: "no"
+    entrypoint: >
+      sh -c "
+        echo 'Waiting for Qdrant...' &&
+        until curl -sf http://qdrant:6333/healthz; do
+          echo 'Not ready, retrying in 2s...' && sleep 2;
+        done &&
+        echo 'Qdrant is up. Creating collection...' &&
+        curl -sf -X PUT http://qdrant:6333/collections/countries \
+          -H 'Content-Type: application/json' \
+          -d '{\"vectors\": {\"size\": 768, \"distance\": \"Cosine\"}}' &&
+        echo 'Done.'
+      "
+
+volumes:
+  qdrant_data:

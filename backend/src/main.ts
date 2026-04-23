@@ -1,13 +1,22 @@
+import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter, NestFastifyApplication } from '@nestjs/platform-fastify';
-import { AppModule } from './app.module';
+import { AppModule } from './app.module.js';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule,
-    new FastifyAdapter(),
+    new FastifyAdapter({ logger: true }),
   );
-  await app.listen(3000, '0.0.0.0');
-  console.log('Server running on http://localhost:3000');
+
+  app.enableCors();
+
+  const port = process.env.PORT ? parseInt(process.env.PORT) : 3000;
+  await app.listen(port, '0.0.0.0');
+  console.log(`🚀 Server running on http://localhost:${port}`);
 }
-bootstrap();
+
+bootstrap().catch((err) => {
+  console.error('Failed to start server:', err);
+  process.exit(1);
+});

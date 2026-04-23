@@ -1,8 +1,8 @@
 import { Module } from '@nestjs/common';
-// Import your modules/services here
+import { ChatModule } from './chat/chat.module';
 
 @Module({
-  imports: [],
+  imports: [ChatModule],
   controllers: [],
   providers: [],
 })

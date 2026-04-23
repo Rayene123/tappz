@@ -1,4 +1,5 @@
 {
+  "type": "module",
   "name": "tappz-rag-backend",
   "version": "1.0.0",
   "description": "Document Q&A Agent with RAG and Evaluation",
@@ -6,9 +7,9 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "start": "node dist/main.js",
-    "start:dev": "ts-node --project tsconfig.json src/main.ts",
-    "ingest": "ts-node --project tsconfig.json src/ingest/run-ingest.ts",
-    "evaluate": "ts-node --project tsconfig.json src/evaluation/run-evaluate.ts"
+    "start:dev": "tsx watch src/main.ts",
+    "ingest": "tsx src/ingest/run-ingest.ts",
+    "evaluate": "tsx src/evaluation/run-evaluate.ts"
   },
   "dependencies": {
     "@ai-sdk/google": "^1.0.0",
@@ -26,8 +27,7 @@
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
-    "ts-node": "^10.9.2",
-    "tsconfig-paths": "^4.2.0",
+    "tsx": "^4.21.0",
     "typescript": "^5.4.0"
   }
 }

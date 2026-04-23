@@ -1,0 +1,208 @@
+{
+  "timestamp": "2026-04-23T17:31:27.762Z",
+  "summary": {
+    "total": 12,
+    "passed": 0,
+    "passRate": "0.0%",
+    "avgRelevance": 0,
+    "avgGroundedness": 0,
+    "avgCitationAccuracy": 0,
+    "avgDurationMs": 114
+  },
+  "byType": {
+    "simple_factual": {
+      "count": 4,
+      "passed": 0,
+      "avgRelevance": 0,
+      "avgGroundedness": 0
+    },
+    "multi_document": {
+      "count": 3,
+      "passed": 0,
+      "avgRelevance": 0,
+      "avgGroundedness": 0
+    },
+    "follow_up": {
+      "count": 3,
+      "passed": 0,
+      "avgRelevance": 0,
+      "avgGroundedness": 0
+    },
+    "out_of_scope": {
+      "count": 2,
+      "passed": 0,
+      "avgRelevance": 0,
+      "avgGroundedness": 0
+    }
+  },
+  "results": [
+    {
+      "id": 1,
+      "type": "simple_factual",
+      "question": "What is the capital of Tunisia?",
+      "answer": "ERROR",
+      "relevance": 0,
+      "groundedness": 0,
+      "citationAccuracy": 0,
+      "hasCitations": false,
+      "citationCount": 0,
+      "sourcesMatch": false,
+      "passed": false,
+      "durationMs": 369
+    },
+    {
+      "id": 2,
+      "type": "simple_factual",
+      "question": "What languages are spoken in Morocco?",
+      "answer": "ERROR",
+      "relevance": 0,
+      "groundedness": 0,
+      "citationAccuracy": 0,
+      "hasCitations": false,
+      "citationCount": 0,
+      "sourcesMatch": false,
+      "passed": false,
+      "durationMs": 80
+    },
+    {
+      "id": 3,
+      "type": "multi_document",
+      "question": "Compare the economies of Tunisia and Morocco.",
+      "answer": "ERROR",
+      "relevance": 0,
+      "groundedness": 0,
+      "citationAccuracy": 0,
+      "hasCitations": false,
+      "citationCount": 0,
+      "sourcesMatch": false,
+      "passed": false,
+      "durationMs": 111
+    },
+    {
+      "id": 4,
+      "type": "multi_document",
+      "question": "Which African countries border the Mediterranean Sea?",
+      "answer": "ERROR",
+      "relevance": 0,
+      "groundedness": 0,
+      "citationAccuracy": 0,
+      "hasCitations": false,
+      "citationCount": 0,
+      "sourcesMatch": false,
+      "passed": false,
+      "durationMs": 91
+    },
+    {
+      "id": 5,
+      "type": "follow_up",
+      "question": "Tell me about Egypt.",
+      "answer": "ERROR",
+      "relevance": 0,
+      "groundedness": 0,
+      "citationAccuracy": 0,
+      "hasCitations": false,
+      "citationCount": 0,
+      "sourcesMatch": false,
+      "passed": false,
+      "durationMs": 76
+    },
+    {
+      "id": 6,
+      "type": "follow_up",
+      "question": "What about its economy?",
+      "answer": "ERROR",
+      "relevance": 0,
+      "groundedness": 0,
+      "citationAccuracy": 0,
+      "hasCitations": false,
+      "citationCount": 0,
+      "sourcesMatch": false,
+      "passed": false,
+      "durationMs": 108
+    },
+    {
+      "id": 7,
+      "type": "follow_up",
+      "question": "How does that compare to Ethiopia?",
+      "answer": "ERROR",
+      "relevance": 0,
+      "groundedness": 0,
+      "citationAccuracy": 0,
+      "hasCitations": false,
+      "citationCount": 0,
+      "sourcesMatch": false,
+      "passed": false,
+      "durationMs": 89
+    },
+    {
+      "id": 8,
+      "type": "out_of_scope",
+      "question": "What is the capital of France?",
+      "answer": "ERROR",
+      "relevance": 0,
+      "groundedness": 0,
+      "citationAccuracy": 0,
+      "hasCitations": false,
+      "citationCount": 0,
+      "sourcesMatch": false,
+      "passed": false,
+      "durationMs": 82
+    },
+    {
+      "id": 9,
+      "type": "out_of_scope",
+      "question": "What is 2+2?",
+      "answer": "ERROR",
+      "relevance": 0,
+      "groundedness": 0,
+      "citationAccuracy": 0,
+      "hasCitations": false,
+      "citationCount": 0,
+      "sourcesMatch": false,
+      "passed": false,
+      "durationMs": 93
+    },
+    {
+      "id": 10,
+      "type": "simple_factual",
+      "question": "What is the population of Nigeria?",
+      "answer": "ERROR",
+      "relevance": 0,
+      "groundedness": 0,
+      "citationAccuracy": 0,
+      "hasCitations": false,
+      "citationCount": 0,
+      "sourcesMatch": false,
+      "passed": false,
+      "durationMs": 88
+    },
+    {
+      "id": 11,
+      "type": "multi_document",
+      "question": "What are the major religions practiced in East African countries like Kenya, Ethiopia, and Tanzania?",
+      "answer": "ERROR",
+      "relevance": 0,
+      "groundedness": 0,
+      "citationAccuracy": 0,
+      "hasCitations": false,
+      "citationCount": 0,
+      "sourcesMatch": false,
+      "passed": false,
+      "durationMs": 91
+    },
+    {
+      "id": 12,
+      "type": "simple_factual",
+      "question": "What natural resources does South Africa have?",
+      "answer": "ERROR",
+      "relevance": 0,
+      "groundedness": 0,
+      "citationAccuracy": 0,
+      "hasCitations": false,
+      "citationCount": 0,
+      "sourcesMatch": false,
+      "passed": false,
+      "durationMs": 84
+    }
+  ]
+}

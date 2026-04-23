@@ -1,7 +1,7 @@
 import { google } from '@ai-sdk/google';
 import { embedMany, embed } from 'ai';
 
-const embeddingModel = google.textEmbeddingModel('text-embedding-004');
+const embeddingModel = google.textEmbeddingModel('gemini-embedding-001');
 
 /**
  * Generates an embedding for a single text string.

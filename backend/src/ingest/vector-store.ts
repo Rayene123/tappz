@@ -2,7 +2,7 @@ import { QdrantClient } from '@qdrant/js-client-rest';
 
 const QDRANT_URL = process.env.QDRANT_URL || 'http://localhost:6333';
 export const COLLECTION = process.env.QDRANT_COLLECTION || 'countries';
-const VECTOR_SIZE = 768; // text-embedding-004 (Google) dimension
+const VECTOR_SIZE = 3072; // text-embedding-001 (Google) dimension
 
 let _client: QdrantClient | null = null;
 

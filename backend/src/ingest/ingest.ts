@@ -1,7 +1,7 @@
-import { chunkDocument } from './chunker';
-import { embedBatch } from './embedder';
-import { upsertChunk, ensureCollection, ChunkPayload } from './vector-store';
-import { logger } from '../utils/logger';
+import { chunkDocument } from './chunker.js';
+import { embedBatch } from './embedder.js';
+import { upsertChunk, ensureCollection, ChunkPayload } from './vector-store.js';
+import { logger } from '../utils/logger.js';
 
 export interface DocumentSection {
   section: string;

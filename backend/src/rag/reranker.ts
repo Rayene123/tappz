@@ -1,7 +1,7 @@
 import { generateText } from 'ai';
 import { google } from '@ai-sdk/google';
-import { ChunkPayload } from '../ingest/vector-store';
-import { logger } from '../utils/logger';
+import { ChunkPayload } from '../ingest/vector-store.js';
+import { logger } from '../utils/logger.js';
 
 /**
  * Two-stage retrieval: LLM re-ranks candidate chunks and returns top-K most relevant.
@@ -25,7 +25,7 @@ Return ONLY a comma-separated list of the ${topK} best indices (e.g., "0,3,5,1,7
 
   try {
     const { text } = await generateText({
-      model: google('gemini-2.0-flash'),
+      model: google('gemini-2.5-flash'),
       prompt,
       maxTokens: 50,
     });
