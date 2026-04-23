@@ -1,49 +1,116 @@
-import { generateText } from 'ai';
-import { google } from '@ai-sdk/google';
-import { ChunkPayload } from '../ingest/vector-store.js';
+import { Mistral } from '@mistralai/mistralai';
 import { logger } from '../utils/logger.js';
+import { RetrievedChunk } from '../chat/qa-routing.js';
+
+const client = new Mistral({
+  apiKey: process.env.MISTRAL_API_KEY!,
+});
 
 /**
- * Two-stage retrieval: LLM re-ranks candidate chunks and returns top-K most relevant.
- * This significantly improves precision over pure vector similarity.
+ * Normalize Mistral response content safely
+ * (fixes: string | ContentChunk[])
+ */
+function normalizeContent(content: unknown): string {
+  if (!content) return '';
+
+  if (typeof content === 'string') return content;
+
+  if (Array.isArray(content)) {
+    return content
+      .map((c: any) => {
+        if (typeof c === 'string') return c;
+        if (c?.text) return c.text;
+        return '';
+      })
+      .join('');
+  }
+
+  return '';
+}
+
+/**
+ * Safe JSON parsing (removes code fences)
+ */
+function safeJsonParse(text: string): any | null {
+  try {
+    const cleaned = text
+      .replace(/```json/g, '')
+      .replace(/```/g, '')
+      .trim();
+
+    return JSON.parse(cleaned);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * LLM reranker using Mistral
  */
 export async function rerankChunks(
   query: string,
-  chunks: ChunkPayload[],
+  chunks: RetrievedChunk[],
   topK = 5,
-): Promise<ChunkPayload[]> {
+): Promise<RetrievedChunk[]> {
   if (chunks.length <= topK) return chunks;
 
-  const prompt = `You are a relevance judge. Given a user query and candidate document chunks, select the ${topK} most relevant chunk indices.
+  const prompt = `
+You are a strict relevance ranking system.
 
-Query: "${query}"
+Return ONLY valid JSON:
+{ "indices": [0,1,2] }
+
+Rules:
+- No explanation
+- No extra text
+- Indices must be unique
+- Indices must be valid (0 to ${chunks.length - 1})
+
+Query:
+${query}
 
 Chunks:
-${chunks.map((c, i) => `[${i}] (${c.sourceTitle} — ${c.section}): ${c.text.slice(0, 200)}...`).join('\n\n')}
-
-Return ONLY a comma-separated list of the ${topK} best indices (e.g., "0,3,5,1,7"). No explanation.`;
+${chunks
+  .map(
+    (c, i) =>
+      `[${i}] ${c.sourceTitle} - ${c.section}: ${c.text.slice(0, 200)}`,
+  )
+  .join('\n\n')}
+`;
 
   try {
-    const { text } = await generateText({
-      model: google('gemini-2.5-flash'),
-      prompt,
-      maxTokens: 50,
+    const res = await client.chat.complete({
+      model: 'mistral-small-latest',
+      temperature: 0,
+      messages: [
+        { role: 'system', content: 'Return ONLY valid JSON.' },
+        { role: 'user', content: prompt },
+      ],
     });
 
-    const indices = text
-      .match(/\d+/g)
-      ?.map(Number)
-      .filter((i) => i >= 0 && i < chunks.length)
-      .slice(0, topK) ?? [];
+    const raw = res.choices[0]?.message?.content;
+    const text = normalizeContent(raw);
 
-    if (indices.length === 0) {
-      logger.warn('Reranker returned no valid indices, using original order');
+    const parsed = safeJsonParse(text);
+
+    if (!parsed?.indices || !Array.isArray(parsed.indices)) {
+      logger.warn('Reranker invalid JSON output, fallback used');
       return chunks.slice(0, topK);
     }
 
-    return indices.map((i) => chunks[i]!);
+    const indices = parsed.indices
+      .filter((i: any) => Number.isInteger(i))
+      .filter((i: number) => i >= 0 && i < chunks.length)
+      .slice(0, topK);
+
+    if (indices.length === 0) {
+      logger.warn('Reranker returned empty indices, fallback used');
+      return chunks.slice(0, topK);
+    }
+
+    return indices.map((i: number) => chunks[i]!);
   } catch (err) {
-    logger.error('Reranker failed, falling back to original order:', err);
+    logger.error('Reranker failed:', err);
     return chunks.slice(0, topK);
   }
 }

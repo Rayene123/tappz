@@ -1,42 +1,107 @@
-import { generateText } from 'ai';
-import { google } from '@ai-sdk/google';
+import { Mistral } from '@mistralai/mistralai';
 import { loadPrompt } from '../utils/prompts.js';
 import { logger } from '../utils/logger.js';
 
-/**
- * Rewrites a potentially ambiguous user query into a self-contained question
- * using conversation history for context resolution.
- * E.g., "What about its economy?" → "What is the economy of Tunisia?"
- */
-export async function rewriteQuery(query: string, history: string[]): Promise<string> {
-  // Skip rewriting if no history or query is already long/specific
-  if (history.length === 0 || query.split(' ').length > 8) {
+const client = new Mistral({
+  apiKey: process.env.MISTRAL_API_KEY!,
+});
+
+export interface RewriteOptions {
+  query: string;
+  history: string[];
+  lastEntity?: string;
+}
+
+const FOLLOW_UP_PATTERNS = [
+  /\b(it|its|they|them|their|there|that|those|these|former|latter)\b/i,
+  /^(what about|how about|and|also|compare that|how does that compare)/i,
+];
+
+function isLikelyFollowUp(query: string, hasHistory: boolean): boolean {
+  if (!hasHistory) return false;
+  return FOLLOW_UP_PATTERNS.some((pattern) => pattern.test(query.trim()));
+}
+
+function injectEntity(query: string, entity: string): string {
+  let rewritten = query.trim();
+
+  rewritten = rewritten.replace(/\bits\b/gi, `${entity}'s`);
+  rewritten = rewritten.replace(/\bit\b/gi, entity);
+  rewritten = rewritten.replace(/\bthat\b/gi, entity);
+  rewritten = rewritten.replace(/\bthere\b/gi, entity);
+
+  if (/^what about\b/i.test(rewritten)) {
+    rewritten = rewritten.replace(/^what about\b/i, `What about ${entity}`);
+  }
+
+  if (/^how does\s+that\s+compare\b/i.test(query)) {
+    rewritten = query.replace(/^how does\s+that\s+compare\b/i, `How does ${entity} compare`);
+  }
+
+  return rewritten.replace(/\s+/g, ' ').trim();
+}
+
+export async function rewriteQuery({
+  query,
+  history,
+  lastEntity,
+}: RewriteOptions): Promise<string> {
+  const hasHistory = history.length > 0;
+  const followUp = isLikelyFollowUp(query, hasHistory);
+
+  if (!followUp) {
     return query;
   }
 
+  const seeded = lastEntity ? injectEntity(query, lastEntity) : query;
   const rewritePrompt = loadPrompt('rewrite');
 
   const prompt = `${rewritePrompt}
 
 Conversation:
 ${history.join('\n')}
+Last referenced entity: ${lastEntity ?? 'unknown'}
 User: ${query}
+Seed rewrite: ${seeded}
 
 Rewritten Query:`;
 
   try {
-    const { text } = await generateText({
-      model: google('gflashemini-2.5-'),
-      prompt,
-      maxTokens: 100,
+    const res = await client.chat.complete({
+      model: 'mistral-small-latest',
+      temperature: 0,
+      messages: [
+        {
+          role: 'system',
+          content:
+            'Rewrite follow-up questions into standalone questions. Prefer the seeded entity-aware rewrite when it is correct. Return only the rewritten query.',
+        },
+        {
+          role: 'user',
+          content: prompt,
+        },
+      ],
     });
-    const rewritten = text.trim();
-    if (rewritten && rewritten !== query) {
-      logger.debug(`Query rewritten: "${query}" → "${rewritten}"`);
+
+    const content = res.choices?.[0]?.message?.content;
+    const rewritten =
+      typeof content === 'string'
+        ? content.trim()
+        : Array.isArray(content)
+          ? content.map((c: any) => c?.text ?? '').join('').trim()
+          : '';
+
+    if (rewritten) {
+      logger.debug(`Query rewritten: "${query}" -> "${rewritten}"`);
+      return rewritten;
     }
-    return rewritten || query;
   } catch (err) {
-    logger.error('Query rewrite failed, using original:', err);
-    return query;
+    logger.error('Query rewrite failed, using deterministic rewrite:', err);
   }
+
+  return seeded;
+}
+
+export function detectFollowUp(query: string, hasHistory: boolean): boolean {
+  return isLikelyFollowUp(query, hasHistory);
 }

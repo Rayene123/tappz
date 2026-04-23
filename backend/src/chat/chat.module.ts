@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
-import { ChatController } from './chat.controller';
-import { ChatService } from './chat.service';
-import { MemoryService } from '../memory/memory.service';
+import { ChatController } from './chat.controller.js';
+import { ChatService } from './chat.service.js';
+import { MemoryService } from '../memory/memory.service.js';
 
 @Module({
   controllers: [ChatController],

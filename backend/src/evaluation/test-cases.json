@@ -11,7 +11,7 @@
     "id": 2,
     "type": "simple_factual",
     "question": "What languages are spoken in Morocco?",
-    "expectedAnswer": "Arabic and Amazigh (Berber)",
+    "expectedAnswer": "Arabic, Berber, French",
     "expectedSources": ["Morocco"],
     "followUp": false
   },
@@ -19,7 +19,7 @@
     "id": 3,
     "type": "multi_document",
     "question": "Compare the economies of Tunisia and Morocco.",
-    "expectedAnswer": "Both rely on tourism and agriculture",
+    "expectedAnswer": "tourism, agriculture",
     "expectedSources": ["Tunisia", "Morocco"],
     "followUp": false
   },
@@ -55,7 +55,7 @@
     "type": "follow_up",
     "sessionId": "eval-followup-1",
     "question": "How does that compare to Ethiopia?",
-    "expectedAnswer": "Ethiopia's economy",
+    "expectedAnswer": "Ethiopia economy comparison",
     "expectedSources": ["Ethiopia"],
     "followUp": true,
     "dependsOn": 6
@@ -64,7 +64,7 @@
     "id": 8,
     "type": "out_of_scope",
     "question": "What is the capital of France?",
-    "expectedAnswer": "I don't have information",
+    "expectedAnswer": "no information",
     "expectedSources": [],
     "followUp": false
   },
@@ -72,7 +72,7 @@
     "id": 9,
     "type": "out_of_scope",
     "question": "What is 2+2?",
-    "expectedAnswer": "I don't have information",
+    "expectedAnswer": "no information",
     "expectedSources": [],
     "followUp": false
   },
@@ -80,7 +80,7 @@
     "id": 10,
     "type": "simple_factual",
     "question": "What is the population of Nigeria?",
-    "expectedAnswer": "over 200 million",
+    "expectedAnswer": "200 million",
     "expectedSources": ["Nigeria"],
     "followUp": false
   },

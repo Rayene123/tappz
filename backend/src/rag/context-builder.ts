@@ -1,18 +1,12 @@
-import { ChunkPayload } from '../ingest/vector-store';
+import { ChunkPayload } from '../ingest/vector-store.js';
 
-/**
- * Formats retrieved chunks into a numbered context string for the LLM.
- * Each chunk gets a citation ID [N] that the model references in its answer.
- */
 export function buildContext(chunks: ChunkPayload[]): string {
-  if (chunks.length === 0) {
-    return 'No relevant context found.';
-  }
+  if (!chunks.length) return '';
 
   return chunks
     .map(
       (c, i) =>
-        `[${i + 1}] Source: ${c.sourceTitle} (${c.section})\n${c.text}`,
+        `[${i + 1}] ${c.sourceTitle} | ${c.section}\n${c.text}`,
     )
-    .join('\n\n---\n\n');
+    .join('\n');
 }

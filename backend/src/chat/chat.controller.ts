@@ -1,6 +1,6 @@
-import { Controller, Post, Body, Res, HttpCode } from '@nestjs/common';
+import { Controller, Post, Body, Res, HttpCode, Inject } from '@nestjs/common';
 import { FastifyReply } from 'fastify';
-import { ChatService } from './chat.service';
+import { ChatService } from './chat.service.js';
 import { z } from 'zod';
 
 const ChatRequestSchema = z.object({
@@ -12,7 +12,7 @@ export type ChatRequest = z.infer<typeof ChatRequestSchema>;
 
 @Controller()
 export class ChatController {
-  constructor(private readonly chatService: ChatService) {}
+  constructor(@Inject(ChatService) private readonly chatService: ChatService) {}
 
   @Post('chat')
   @HttpCode(200)

@@ -1,27 +1,54 @@
-import { google } from '@ai-sdk/google';
-import { embedMany, embed } from 'ai';
+import { FlagEmbedding, EmbeddingModel } from 'fastembed';
 
-const embeddingModel = google.textEmbeddingModel('gemini-embedding-001');
+let model: FlagEmbedding | null = null;
 
-/**
- * Generates an embedding for a single text string.
- */
-export async function embedText(text: string): Promise<number[]> {
-  const { embedding } = await embed({
-    model: embeddingModel,
-    value: text,
-  });
-  return embedding;
+async function getModel() {
+  if (!model) {
+    model = await FlagEmbedding.init({
+      model: EmbeddingModel.BGESmallENV15,
+    });
+  }
+  return model;
 }
 
 /**
- * Generates embeddings for multiple texts in a single batch call.
- * More efficient for ingestion pipelines.
+ * Single embedding
+ */
+export async function embedText(text: string): Promise<number[]> {
+  const m = await getModel();
+
+  const generator = await m.embed([text]);
+
+  for await (const batch of generator) {
+    if (!batch?.[0]) {
+      throw new Error('Empty embedding result');
+    }
+    return batch[0];
+  }
+
+  throw new Error('Embedding failed');
+}
+/**
+ * Batch embeddings
  */
 export async function embedBatch(texts: string[]): Promise<number[][]> {
-  const { embeddings } = await embedMany({
-    model: embeddingModel,
-    values: texts,
-  });
-  return embeddings;
+  const m = await getModel();
+
+  const generator = await m.embed(texts);
+
+  const results: number[][] = [];
+
+  for await (const batch of generator) {
+    for (const emb of batch) {
+      results.push(emb);
+    }
+  }
+
+  if (results.length !== texts.length) {
+    throw new Error(
+      `Embedding mismatch: expected ${texts.length}, got ${results.length}`
+    );
+  }
+
+  return results;
 }
