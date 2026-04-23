@@ -5,3 +5,4 @@ dist/
 .qdrant/
 qdrant_data/
 local_cache/
+.vite/
