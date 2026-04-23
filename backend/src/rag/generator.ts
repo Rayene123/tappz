@@ -1,25 +1,11 @@
-import { Mistral } from '@mistralai/mistralai';
+import { generateObject, generateText, streamText } from 'ai';
+import { mistral } from '@ai-sdk/mistral';
 import { Message } from '../memory/memory.service.js';
 import { CitationSchema } from '../schemas/citation.schema.js';
 import { z } from 'zod';
 import { ChunkPayload } from '../ingest/vector-store.js';
 
-const client = new Mistral({
-  apiKey: process.env.MISTRAL_API_KEY!,
-});
-
-function normalizeContent(content: unknown): string {
-  if (!content) return '';
-  if (typeof content === 'string') return content;
-
-  if (Array.isArray(content)) {
-    return content
-      .map((c: any) => (typeof c === 'string' ? c : c?.text ?? ''))
-      .join('');
-  }
-
-  return '';
-}
+const model = mistral('mistral-small-latest');
 
 export type AnswerMode = 'general' | 'rag' | 'mixed';
 
@@ -32,14 +18,14 @@ export interface GenerateOptions {
   requireComparisonSynthesis?: boolean;
 }
 
-export async function generateAnswer({
+function buildPrompt({
   query,
   context,
   history,
   systemPrompt,
   mode,
   requireComparisonSynthesis = false,
-}: GenerateOptions): Promise<string> {
+}: GenerateOptions): string {
   const groundingRules =
     mode === 'general'
       ? `You may answer using your own model knowledge. Do not mention missing knowledge base context. Do not use citations unless context is explicitly provided. Answer in a complete sentence that restates the subject of the question.`
@@ -56,33 +42,43 @@ export async function generateAnswer({
       ? `If the question asks for a set, list, or multiple entities, provide the full set you can support rather than a single example.`
       : '';
 
-  const messages = [
-    {
-      role: 'system' as const,
-      content: [systemPrompt, groundingRules, comparisonRule, listRule]
-        .filter(Boolean)
-        .join('\n\n'),
-    },
-    ...history.map((m) => ({
-      role: m.role as 'user' | 'assistant',
-      content: m.content,
-    })),
-    {
-      role: 'user' as const,
-      content: [
-        context ? `CONTEXT:\n${context}` : 'CONTEXT:\nNone',
-        `QUESTION:\n${query}`,
-      ].join('\n\n'),
-    },
-  ];
+  const conversation = history
+    .map((m) => `${m.role.toUpperCase()}: ${m.content}`)
+    .join('\n');
 
-  const res = await client.chat.complete({
-    model: 'mistral-small-latest',
-    temperature: mode === 'general' ? 0.3 : 0.2,
-    messages,
+  return [
+    systemPrompt,
+    groundingRules,
+    comparisonRule,
+    listRule,
+    conversation ? `CONVERSATION HISTORY:\n${conversation}` : '',
+    context ? `CONTEXT:\n${context}` : 'CONTEXT:\nNone',
+    `QUESTION:\n${query}`,
+  ]
+    .filter(Boolean)
+    .join('\n\n');
+}
+
+export async function generateAnswer(options: GenerateOptions): Promise<string> {
+  const prompt = buildPrompt(options);
+
+  const { text } = await generateText({
+    model,
+    prompt,
+    temperature: options.mode === 'general' ? 0.3 : 0.2,
   });
 
-  return normalizeContent(res.choices?.[0]?.message?.content).trim();
+  return text.trim();
+}
+
+export function streamAnswer(options: GenerateOptions) {
+  const prompt = buildPrompt(options);
+
+  return streamText({
+    model,
+    prompt,
+    temperature: options.mode === 'general' ? 0.3 : 0.2,
+  });
 }
 
 export async function generateCitations(
@@ -94,21 +90,26 @@ export async function generateCitations(
     return { citations: [] };
   }
 
-  const matches = [...answer.matchAll(/\[(\d+)\]/g)];
-  const citedIds = new Set(
-    matches.map((m) => Number(m[1])).filter((n) => !isNaN(n)),
-  );
+  const citedChunks = chunks.map((chunk, index) => ({
+    id: index + 1,
+    sourceTitle: chunk.sourceTitle,
+    excerpt: chunk.text.slice(0, 300),
+  }));
 
-  const citations = Array.from(citedIds)
-    .filter((id) => id >= 1 && id <= chunks.length)
-    .map((id) => {
-      const chunk = chunks[id - 1];
-      return {
-        id,
-        sourceTitle: chunk.sourceTitle,
-        excerpt: chunk.text.slice(0, 150),
-      };
-    });
+  const prompt = [
+    'Extract only the citations that are actually referenced in the answer.',
+    'Return JSON that matches the provided schema exactly.',
+    'If no citations are used, return an empty citations array.',
+    `ANSWER:\n${answer}`,
+    `AVAILABLE CITATIONS:\n${JSON.stringify(citedChunks, null, 2)}`,
+  ].join('\n\n');
 
-  return { citations };
+  const { object } = await generateObject({
+    model,
+    schema: CitationSchema,
+    prompt,
+    temperature: 0,
+  });
+
+  return object;
 }

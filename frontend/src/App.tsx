@@ -26,6 +26,13 @@ type ChatResponse = {
   rewrittenQuery?: string;
 };
 
+type StreamedChatMeta = {
+  __citations?: Citation[];
+  intent?: string;
+  usedContext?: boolean;
+  rewrittenQuery?: string;
+};
+
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, '') ?? 'http://localhost:3000';
 
@@ -49,12 +56,50 @@ async function sendChatMessage(message: string, sessionId: string): Promise<Chat
     body: JSON.stringify({ message, sessionId }),
   });
 
+  const text = await response.text();
+
   if (!response.ok) {
-    const text = await response.text();
-    throw new Error(text || 'Chat request failed');
+    try {
+      const parsed = JSON.parse(text) as { error?: string; message?: string; answer?: string };
+      throw new Error(parsed.error ?? parsed.message ?? parsed.answer ?? 'Chat request failed');
+    } catch {
+      throw new Error(text || 'Chat request failed');
+    }
   }
 
-  return (await response.json()) as ChatResponse;
+  return parseStreamedChatResponse(text);
+}
+
+function parseStreamedChatResponse(payload: string): ChatResponse {
+  const trimmed = payload.trim();
+  const delimiter = '\n\n__CITATIONS__\n';
+  const delimiterIndex = trimmed.lastIndexOf(delimiter);
+
+  if (delimiterIndex !== -1) {
+    const answer = trimmed.slice(0, delimiterIndex).trim();
+    const metaText = trimmed.slice(delimiterIndex + delimiter.length).trim();
+
+    try {
+      const meta = JSON.parse(metaText) as StreamedChatMeta;
+      return {
+        answer,
+        citations: meta.__citations ?? [],
+        intent: meta.intent,
+        usedContext: meta.usedContext,
+        rewrittenQuery: meta.rewrittenQuery,
+      };
+    } catch {
+      return {
+        answer: trimmed,
+        citations: [],
+      };
+    }
+  }
+
+  return {
+    answer: trimmed,
+    citations: [],
+  };
 }
 
 async function clearSession(sessionId: string): Promise<void> {

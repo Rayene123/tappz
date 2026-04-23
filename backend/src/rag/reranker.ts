@@ -1,36 +1,10 @@
-import { Mistral } from '@mistralai/mistralai';
+import { generateText } from 'ai';
+import { mistral } from '@ai-sdk/mistral';
 import { logger } from '../utils/logger.js';
 import { RetrievedChunk } from '../chat/qa-routing.js';
 
-const client = new Mistral({
-  apiKey: process.env.MISTRAL_API_KEY!,
-});
+const model = mistral('mistral-small-latest');
 
-/**
- * Normalize Mistral response content safely
- * (fixes: string | ContentChunk[])
- */
-function normalizeContent(content: unknown): string {
-  if (!content) return '';
-
-  if (typeof content === 'string') return content;
-
-  if (Array.isArray(content)) {
-    return content
-      .map((c: any) => {
-        if (typeof c === 'string') return c;
-        if (c?.text) return c.text;
-        return '';
-      })
-      .join('');
-  }
-
-  return '';
-}
-
-/**
- * Safe JSON parsing (removes code fences)
- */
 function safeJsonParse(text: string): any | null {
   try {
     const cleaned = text
@@ -44,9 +18,6 @@ function safeJsonParse(text: string): any | null {
   }
 }
 
-/**
- * LLM reranker using Mistral
- */
 export async function rerankChunks(
   query: string,
   chunks: RetrievedChunk[],
@@ -79,17 +50,13 @@ ${chunks
 `;
 
   try {
-    const res = await client.chat.complete({
-      model: 'mistral-small-latest',
+    const { text } = await generateText({
+      model,
+      prompt,
       temperature: 0,
-      messages: [
-        { role: 'system', content: 'Return ONLY valid JSON.' },
-        { role: 'user', content: prompt },
-      ],
+      maxOutputTokens: 120,
+      system: 'Return ONLY valid JSON.',
     });
-
-    const raw = res.choices[0]?.message?.content;
-    const text = normalizeContent(raw);
 
     const parsed = safeJsonParse(text);
 
@@ -99,7 +66,7 @@ ${chunks
     }
 
     const indices = parsed.indices
-      .filter((i: any) => Number.isInteger(i))
+      .filter((i: unknown) => Number.isInteger(i))
       .filter((i: number) => i >= 0 && i < chunks.length)
       .slice(0, topK);
 

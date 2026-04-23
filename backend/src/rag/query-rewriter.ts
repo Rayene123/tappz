@@ -1,10 +1,9 @@
-import { Mistral } from '@mistralai/mistralai';
+import { generateText } from 'ai';
+import { mistral } from '@ai-sdk/mistral';
 import { loadPrompt } from '../utils/prompts.js';
 import { logger } from '../utils/logger.js';
 
-const client = new Mistral({
-  apiKey: process.env.MISTRAL_API_KEY!,
-});
+const model = mistral('mistral-small-latest');
 
 export interface RewriteOptions {
   query: string;
@@ -67,29 +66,16 @@ Seed rewrite: ${seeded}
 Rewritten Query:`;
 
   try {
-    const res = await client.chat.complete({
-      model: 'mistral-small-latest',
+    const { text } = await generateText({
+      model,
+      prompt,
       temperature: 0,
-      messages: [
-        {
-          role: 'system',
-          content:
-            'Rewrite follow-up questions into standalone questions. Prefer the seeded entity-aware rewrite when it is correct. Return only the rewritten query.',
-        },
-        {
-          role: 'user',
-          content: prompt,
-        },
-      ],
+      maxOutputTokens: 120,
+      system:
+        'Rewrite follow-up questions into standalone questions. Prefer the seeded entity-aware rewrite when it is correct. Return only the rewritten query.',
     });
 
-    const content = res.choices?.[0]?.message?.content;
-    const rewritten =
-      typeof content === 'string'
-        ? content.trim()
-        : Array.isArray(content)
-          ? content.map((c: any) => c?.text ?? '').join('').trim()
-          : '';
+    const rewritten = text.trim();
 
     if (rewritten) {
       logger.debug(`Query rewritten: "${query}" -> "${rewritten}"`);

@@ -1,7 +1,12 @@
 import { Injectable, Inject } from '@nestjs/common';
 import { FastifyReply } from 'fastify';
 import { z } from 'zod';
-import { generateAnswer, generateCitations, AnswerMode } from '../rag/generator.js';
+import {
+  generateAnswer,
+  generateCitations,
+  streamAnswer,
+  AnswerMode,
+} from '../rag/generator.js';
 import { retrieveChunks } from '../rag/retriever.js';
 import { rerankChunks } from '../rag/reranker.js';
 import { rewriteQuery, detectFollowUp } from '../rag/query-rewriter.js';
@@ -32,6 +37,26 @@ export interface AskResult {
   intent: QueryIntent;
   usedContext: boolean;
   rewrittenQuery: string;
+}
+
+export interface PreparedAnswer extends AskResult {
+  systemPrompt: string;
+  context: string;
+  history: import('../memory/memory.service.js').Message[];
+  answerMode: AnswerMode;
+  requireComparisonSynthesis: boolean;
+}
+
+export interface PreparedQuestion {
+  chunks: RetrievedChunk[];
+  intent: QueryIntent;
+  usedContext: boolean;
+  rewrittenQuery: string;
+  systemPrompt: string;
+  context: string;
+  history: import('../memory/memory.service.js').Message[];
+  answerMode: AnswerMode;
+  requireComparisonSynthesis: boolean;
 }
 
 const RERANK_TOP_K = 6;
@@ -73,7 +98,7 @@ export class ChatService {
     }
   }
 
-  private async runQuestion(question: string, sessionId: string): Promise<AskResult> {
+  private async prepareQuestion(question: string, sessionId: string): Promise<PreparedQuestion> {
     const history = this.memory.getHistory(sessionId);
     const textHistory = this.memory.getTextHistory(sessionId);
     const lastEntity = this.memory.getLastEntity(sessionId);
@@ -114,46 +139,6 @@ export class ChatService {
       userName: sessionId,
     });
 
-    let answer = await generateAnswer({
-      query: rewrittenQuery,
-      context,
-      history,
-      systemPrompt,
-      mode: answerMode,
-      requireComparisonSynthesis: intent === 'comparison',
-    });
-
-    if (
-      answerMode !== 'general' &&
-      CONTEXT_LIMITATION_PATTERNS.some((pattern) => pattern.test(answer))
-    ) {
-      answer = await generateAnswer({
-        query: rewrittenQuery,
-        context,
-        history,
-        systemPrompt,
-        mode: 'mixed',
-        requireComparisonSynthesis: intent === 'comparison',
-      });
-    }
-
-    const citationsPayload = await generateCitations(answer, chunks, useContext);
-    const nextEntity = extractBestEntity(rewrittenQuery, chunks, lastEntity);
-
-    this.memory.addMessage(sessionId, {
-      role: 'user',
-      content: question,
-    });
-
-    this.memory.addMessage(sessionId, {
-      role: 'assistant',
-      content: answer,
-    });
-
-    if (nextEntity) {
-      this.memory.setLastEntity(sessionId, nextEntity);
-    }
-
     logger.info(
       `[${sessionId}] intent=${intent} rewritten="${rewrittenQuery}" useContext=${useContext} topScore=${retrieval.topScore.toFixed(
         2,
@@ -161,29 +146,78 @@ export class ChatService {
     );
 
     return {
-      answer,
-      citations: citationsPayload.citations,
       chunks,
       intent,
       usedContext: useContext,
       rewrittenQuery,
+      systemPrompt,
+      context,
+      history,
+      answerMode,
+      requireComparisonSynthesis: intent === 'comparison',
     };
   }
 
   async streamChat({ message, sessionId, reply }: StreamChatOptions): Promise<void> {
     try {
-      const result = await this.runQuestion(message, sessionId);
+      const prepared = await this.prepareQuestion(message, sessionId);
+      const stream = streamAnswer({
+        query: prepared.rewrittenQuery,
+        context: prepared.context,
+        history: prepared.history,
+        systemPrompt: prepared.systemPrompt,
+        mode: prepared.answerMode,
+        requireComparisonSynthesis: prepared.requireComparisonSynthesis,
+      });
 
-      return reply
-        .header('Content-Type', 'application/json')
-        .header('X-Session-Id', sessionId)
-        .send({
-          answer: result.answer,
-          citations: result.citations,
-          intent: result.intent,
-          usedContext: result.usedContext,
-          rewrittenQuery: result.rewrittenQuery,
-        });
+      reply.raw.statusCode = 200;
+      reply.raw.setHeader('Content-Type', 'text/plain; charset=utf-8');
+      reply.raw.setHeader('X-Session-Id', sessionId);
+      reply.raw.setHeader('Access-Control-Allow-Origin', '*');
+      reply.raw.setHeader('Access-Control-Expose-Headers', 'X-Session-Id');
+
+      let answer = '';
+      for await (const delta of stream.textStream) {
+        answer += delta;
+        reply.raw.write(delta);
+      }
+
+      const citationsPayload = await generateCitations(
+        answer,
+        prepared.chunks,
+        prepared.usedContext,
+      );
+
+      this.memory.addMessage(sessionId, {
+        role: 'user',
+        content: message,
+      });
+
+      this.memory.addMessage(sessionId, {
+        role: 'assistant',
+        content: answer,
+      });
+
+      const nextEntity = extractBestEntity(
+        prepared.rewrittenQuery,
+        prepared.chunks,
+        this.memory.getLastEntity(sessionId),
+      );
+
+      if (nextEntity) {
+        this.memory.setLastEntity(sessionId, nextEntity);
+      }
+
+      reply.raw.write(
+        `\n\n__CITATIONS__\n${JSON.stringify({
+          __citations: citationsPayload.citations,
+          intent: prepared.intent,
+          usedContext: prepared.usedContext,
+          rewrittenQuery: prepared.rewrittenQuery,
+        })}`,
+      );
+      reply.raw.end();
+      return;
     } catch (err) {
       logger.error('Answer generation failed:', err);
       const errorMessage =
@@ -202,7 +236,62 @@ export class ChatService {
   }
 
   async ask(question: string, sessionId = 'eval'): Promise<AskResult> {
-    return this.runQuestion(question, sessionId);
+    const prepared = await this.prepareQuestion(question, sessionId);
+
+    let answer = await generateAnswer({
+      query: prepared.rewrittenQuery,
+      context: prepared.context,
+      history: prepared.history,
+      systemPrompt: prepared.systemPrompt,
+      mode: prepared.answerMode,
+      requireComparisonSynthesis: prepared.requireComparisonSynthesis,
+    });
+
+    if (
+      prepared.answerMode !== 'general' &&
+      CONTEXT_LIMITATION_PATTERNS.some((pattern) => pattern.test(answer))
+    ) {
+      answer = await generateAnswer({
+        query: prepared.rewrittenQuery,
+        context: prepared.context,
+        history: prepared.history,
+        systemPrompt: prepared.systemPrompt,
+        mode: 'mixed',
+        requireComparisonSynthesis: prepared.requireComparisonSynthesis,
+      });
+    }
+
+    const citationsPayload = await generateCitations(
+      answer,
+      prepared.chunks,
+      prepared.usedContext,
+    );
+
+    this.memory.addMessage(sessionId, {
+      role: 'user',
+      content: question,
+    });
+
+    this.memory.addMessage(sessionId, {
+      role: 'assistant',
+      content: answer,
+    });
+
+    const nextEntity = extractBestEntity(
+      prepared.rewrittenQuery,
+      prepared.chunks,
+      this.memory.getLastEntity(sessionId),
+    );
+
+    if (nextEntity) {
+      this.memory.setLastEntity(sessionId, nextEntity);
+    }
+
+    return {
+      ...prepared,
+      answer,
+      citations: citationsPayload.citations,
+    };
   }
 
   clearSession(sessionId: string): void {
