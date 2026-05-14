@@ -66,8 +66,7 @@ ${chunks
     }
 
     const indices = parsed.indices
-      .filter((i: unknown) => Number.isInteger(i))
-      .filter((i: number) => i >= 0 && i < chunks.length)
+      .filter((i: unknown) => Number.isInteger(i)&& (Number(i)>=0) && (Number(i) < chunks.length))
       .slice(0, topK);
 
     if (indices.length === 0) {
