@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useRef, useState, startTransition } from 'react';
 
 type Citation = {
   id: number;
@@ -72,9 +72,7 @@ async function streamChatMessage(
 ): Promise<ChatResponse> {
   const response = await fetch(`${API_BASE_URL}/chat`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ message, sessionId }),
   });
 
@@ -109,7 +107,6 @@ async function streamChatMessage(
 
     if (!foundDelimiter) {
       const delimiterIndex = buffer.indexOf(delimiter);
-
       if (delimiterIndex === -1) {
         const safeLength = Math.max(0, buffer.length - (delimiter.length - 1));
         if (safeLength > 0) {
@@ -120,10 +117,7 @@ async function streamChatMessage(
         }
       } else {
         const chunk = buffer.slice(0, delimiterIndex);
-        if (chunk) {
-          answer += chunk;
-          onDelta(chunk, answer);
-        }
+        if (chunk) { answer += chunk; onDelta(chunk, answer); }
         buffer = buffer.slice(delimiterIndex + delimiter.length);
         foundDelimiter = true;
         metaBuffer += buffer;
@@ -138,20 +132,13 @@ async function streamChatMessage(
   buffer += decoder.decode();
 
   if (!foundDelimiter) {
-    if (buffer) {
-      answer += buffer;
-      onDelta(buffer, answer);
-    }
-    return {
-      answer: answer.trim(),
-      citations: [],
-    };
+    if (buffer) { answer += buffer; onDelta(buffer, answer); }
+    return { answer: answer.trim(), citations: [] };
   }
 
   metaBuffer += buffer;
-  const metaText = metaBuffer.trim();
   try {
-    const meta = JSON.parse(metaText) as StreamedChatMeta;
+    const meta = JSON.parse(metaBuffer.trim()) as StreamedChatMeta;
     return {
       answer: answer.trim(),
       citations: meta.__citations ?? [],
@@ -160,10 +147,7 @@ async function streamChatMessage(
       rewrittenQuery: meta.rewrittenQuery,
     };
   } catch {
-    return {
-      answer: answer.trim(),
-      citations: [],
-    };
+    return { answer: answer.trim(), citations: [] };
   }
 }
 
@@ -175,7 +159,6 @@ function parseStreamedChatResponse(payload: string): ChatResponse {
   if (delimiterIndex !== -1) {
     const answer = trimmed.slice(0, delimiterIndex).trim();
     const metaText = trimmed.slice(delimiterIndex + delimiter.length).trim();
-
     try {
       const meta = JSON.parse(metaText) as StreamedChatMeta;
       return {
@@ -186,26 +169,18 @@ function parseStreamedChatResponse(payload: string): ChatResponse {
         rewrittenQuery: meta.rewrittenQuery,
       };
     } catch {
-      return {
-        answer: trimmed,
-        citations: [],
-      };
+      return { answer: trimmed, citations: [] };
     }
   }
 
-  return {
-    answer: trimmed,
-    citations: [],
-  };
+  return { answer: trimmed, citations: [] };
 }
 
 function renderAssistantContent(content: string) {
   const lines = content.split('\n').filter((line) => line.trim().length > 0);
-
   return lines.map((line, index) => {
     const cleaned = line.replace(/\*\*(.+?)\*\*/g, '$1').trim();
     const subtitleMatch = cleaned.match(/^[-*]?\s*([^:]+):\s*(.*)$/);
-
     if (subtitleMatch) {
       const [, title, rest] = subtitleMatch;
       return (
@@ -215,7 +190,6 @@ function renderAssistantContent(content: string) {
         </p>
       );
     }
-
     return (
       <p key={`${index}-${cleaned}`} className="message-content">
         {cleaned}
@@ -225,23 +199,43 @@ function renderAssistantContent(content: string) {
 }
 
 export default function App() {
-  const [conversations, setConversations] = useState<Conversation[]>(() => [
-    createConversation(),
-  ]);
+  const [conversations, setConversations] = useState<Conversation[]>(() => [createConversation()]);
   const [activeConversationId, setActiveConversationId] = useState<string>(() =>
     conversations[0] ? conversations[0].id : '',
   );
   const [message, setMessage] = useState('');
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [selectedCitations, setSelectedCitations] = useState<Citation[]>([]);
+  const [hasAnyCitations, setHasAnyCitations] = useState(false);
   const scrollerRef = useRef<HTMLDivElement | null>(null);
+  const sidebarRef = useRef<HTMLElement | null>(null);
+  const [sidebarVisible, setSidebarVisible] = useState(false);
+  // Keep a ref so streaming callbacks always see the latest active conversation id
+  const activeConversationIdRef = useRef(activeConversationId);
 
   const activeConversation = useMemo(
     () =>
-      conversations.find((conversation) => conversation.id === activeConversationId) ??
-      conversations[0],
+      conversations.find((c) => c.id === activeConversationId) ?? conversations[0],
     [conversations, activeConversationId],
   );
+
+  // Keep ref in sync
+  useEffect(() => {
+    activeConversationIdRef.current = activeConversationId;
+  }, [activeConversationId]);
+  useEffect(() => {
+    if (!activeConversation) return;
+    const msgs = activeConversation.messages;
+    for (let i = msgs.length - 1; i >= 0; i--) {
+      if (msgs[i].role === 'assistant' && msgs[i].citations && msgs[i].citations!.length > 0) {
+        setSelectedCitations(msgs[i].citations!);
+        setHasAnyCitations(true);
+        return;
+      }
+    }
+    setSelectedCitations([]);
+  }, [activeConversation]);
 
   useEffect(() => {
     const node = scrollerRef.current;
@@ -249,85 +243,112 @@ export default function App() {
     node.scrollTop = node.scrollHeight;
   }, [activeConversation?.messages, isSending]);
 
+  // Sidebar hover detection via proximity to left edge
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (e.clientX <= 12) {
+        setSidebarVisible(true);
+      }
+    };
+
+    const handleClickOutside = (e: MouseEvent) => {
+      if (sidebarRef.current && !sidebarRef.current.contains(e.target as Node)) {
+        setSidebarVisible(false);
+      }
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
+
   function updateConversation(
     conversationId: string,
-    updater: (conversation: Conversation) => Conversation,
+    updater: (c: Conversation) => Conversation,
   ) {
     setConversations((current) =>
-      current.map((conversation) =>
-        conversation.id === conversationId ? updater(conversation) : conversation,
-      ),
+      current.map((c) => (c.id === conversationId ? updater(c) : c)),
     );
   }
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function handleSubmit(event?: FormEvent<HTMLFormElement>) {
+    event?.preventDefault();
     const trimmed = message.trim();
     if (!trimmed || isSending) return;
 
-    const userMessage: ChatMessage = {
-      id: crypto.randomUUID(),
-      role: 'user',
-      content: trimmed,
-    };
-
+    const convId = activeConversationIdRef.current;
+    const userMessage: ChatMessage = { id: crypto.randomUUID(), role: 'user', content: trimmed };
     const assistantId = crypto.randomUUID();
 
     if (!activeConversation) return;
 
-    updateConversation(activeConversation.id, (conversation) => {
-      const nextTitle =
-        conversation.title === 'New chat' ? trimmed.slice(0, 48) : conversation.title;
-      return {
-        ...conversation,
-        title: nextTitle,
-        messages: [
-          ...conversation.messages,
-          userMessage,
-          {
-            id: assistantId,
-            role: 'assistant',
-            content: '',
-            citations: [],
-          },
-        ],
-      };
-    });
+    updateConversation(convId, (c) => ({
+      ...c,
+      title: c.title === 'New chat' ? trimmed.slice(0, 48) : c.title,
+      messages: [
+        ...c.messages,
+        userMessage,
+        { id: assistantId, role: 'assistant' as const, content: '', citations: [] },
+      ],
+    }));
     setMessage('');
     setError(null);
     setIsSending(true);
+
+    // Capture assistantId in a ref so the onDelta closure is always fresh
+    const assistantIdRef = { current: assistantId };
 
     try {
       const result = await streamChatMessage(
         trimmed,
         activeConversation.sessionId,
         (_chunk, fullText) => {
-          updateConversation(activeConversation.id, (conversation) => ({
-            ...conversation,
-            messages: conversation.messages.map((entry) =>
-              entry.id === assistantId ? { ...entry, content: fullText } : entry,
-            ),
-          }));
+          // Use startTransition so streaming updates don't block the browser
+          startTransition(() => {
+            setConversations((prev) =>
+              prev.map((c) =>
+                c.id !== convId
+                  ? c
+                  : {
+                      ...c,
+                      messages: c.messages.map((entry) =>
+                        entry.id === assistantIdRef.current
+                          ? { ...entry, content: fullText }
+                          : entry,
+                      ),
+                    },
+              ),
+            );
+          });
         },
       );
 
-      updateConversation(activeConversation.id, (conversation) => ({
-        ...conversation,
-        messages: conversation.messages.map((entry) =>
-          entry.id === assistantId
-            ? {
-                ...entry,
-                content: result.answer,
-                citations: result.citations,
-                meta: {
-                  intent: result.intent,
-                  usedContext: result.usedContext,
-                  rewrittenQuery: result.rewrittenQuery,
-                },
-              }
-            : entry,
+      setConversations((prev) =>
+        prev.map((c) =>
+          c.id !== convId
+            ? c
+            : {
+                ...c,
+                messages: c.messages.map((entry) =>
+                  entry.id === assistantIdRef.current
+                    ? {
+                        ...entry,
+                        content: result.answer,
+                        citations: result.citations,
+                        meta: {
+                          intent: result.intent,
+                          usedContext: result.usedContext,
+                          rewrittenQuery: result.rewrittenQuery,
+                        },
+                      }
+                    : entry,
+                ),
+              },
         ),
-      }));
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong');
     } finally {
@@ -335,16 +356,37 @@ export default function App() {
     }
   }
 
+  function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      if (!isSending && message.trim().length > 0) {
+        handleSubmit();
+      }
+    }
+  }
+
   function handleReset() {
     setError(null);
-    const nextConversation = createConversation();
-    setConversations((current) => [nextConversation, ...current]);
-    setActiveConversationId(nextConversation.id);
+    setSelectedCitations([]);
+    setHasAnyCitations(false);
+    const next = createConversation();
+    setConversations((current) => [next, ...current]);
+    setActiveConversationId(next.id);
   }
 
   return (
     <div className="app-shell">
-      <aside className="sidebar">
+      {/* Invisible hover trigger strip */}
+      <div
+        className="sidebar-trigger"
+        onMouseEnter={() => setSidebarVisible(true)}
+      />
+
+      <aside
+        ref={sidebarRef}
+        className={`sidebar${sidebarVisible ? ' sidebar-open' : ''}`}
+        onMouseLeave={() => setSidebarVisible(false)}
+      >
         <div className="brand-block">
           <p className="eyebrow">Tappz</p>
           <h1>Chat</h1>
@@ -361,16 +403,14 @@ export default function App() {
             <p className="history-empty">No messages yet.</p>
           ) : (
             <div className="history-list">
-              {conversations.map((conversation) => (
+              {conversations.map((c) => (
                 <button
-                  key={conversation.id}
+                  key={c.id}
                   type="button"
-                  className={`history-item${
-                    conversation.id === activeConversationId ? ' active' : ''
-                  }`}
-                  onClick={() => setActiveConversationId(conversation.id)}
+                  className={`history-item${c.id === activeConversationId ? ' active' : ''}`}
+                  onClick={() => { setActiveConversationId(c.id); setSidebarVisible(false); }}
                 >
-                  <span className="history-text">{conversation.title}</span>
+                  <span className="history-text">{c.title}</span>
                 </button>
               ))}
             </div>
@@ -384,9 +424,7 @@ export default function App() {
           </div>
           <div>
             <span className="label">Session</span>
-            <div className="sidebar-value">
-              {activeConversation?.sessionId ?? '-'}
-            </div>
+            <div className="sidebar-value">{activeConversation?.sessionId ?? '-'}</div>
           </div>
         </div>
       </aside>
@@ -399,93 +437,87 @@ export default function App() {
           </div>
         </header>
 
-        <div className="chat-log" ref={scrollerRef}>
-          {!activeConversation || activeConversation.messages.length === 0 ? (
-            <section className="empty-state">
-              <h3>Start a conversation</h3>
-              <p>
-                Ask a general question, a RAG-backed question, or try a follow-up.
-              </p>
-            </section>
-          ) : (
-            activeConversation.messages.map((entry) => (
-              <article
-                key={entry.id}
-                className={`message message-${entry.role}`}
-                data-message-id={entry.id}
-              >
-                <div className="message-inner">
-                  <div className="message-header">
-                    <span className="message-role">
-                      {entry.role === 'user' ? 'You' : 'Assistant'}
-                    </span>
-                  </div>
-                  {entry.role === 'assistant'
-                    ? renderAssistantContent(entry.content)
-                    : <p className="message-content">{entry.content}</p>}
-
-                  {entry.role === 'assistant' && entry.meta ? (
-                    <div className="meta-row">
-                      {entry.meta.intent ? <span>{entry.meta.intent}</span> : null}
-                      {typeof entry.meta.usedContext === 'boolean' ? (
-                        <span>
-                          {entry.meta.usedContext ? 'grounded' : 'general knowledge'}
-                        </span>
-                      ) : null}
+        <div className="chat-body">
+          <div className="chat-log" ref={scrollerRef}>
+            {!activeConversation || activeConversation.messages.length === 0 ? (
+              <section className="empty-state">
+                <h3>Start a conversation</h3>
+                <p>Ask a general question, a RAG-backed question, or try a follow-up.</p>
+              </section>
+            ) : (
+              activeConversation.messages.map((entry) => (
+                <article
+                  key={entry.id}
+                  className={`message message-${entry.role}`}
+                  data-message-id={entry.id}
+                >
+                  <div className="message-inner">
+                    <div className="message-header">
+                      <span className="message-role">
+                        {entry.role === 'user' ? 'You' : 'Assistant'}
+                      </span>
                     </div>
-                  ) : null}
+                    {entry.role === 'assistant'
+                      ? renderAssistantContent(entry.content)
+                      : <p className="message-content">{entry.content}</p>}
 
-                  {entry.citations && entry.citations.length > 0 ? (
-                    <div className="citations">
-                      <div className="citation-title">Sources</div>
-                      <div className="citation-list">
-                        {entry.citations.map((citation) => (
-                          <div
-                            key={`${entry.id}-${citation.id}`}
-                            className="citation-item"
-                          >
-                            <div className="citation-icon" aria-hidden="true">
-                              <svg
-                                viewBox="0 0 24 24"
-                                focusable="false"
-                                role="img"
-                                aria-label="Wikipedia"
-                              >
-                                <circle cx="12" cy="12" r="10" />
-                                <text x="12" y="16" textAnchor="middle">
-                                  W
-                                </text>
-                              </svg>
-                            </div>
-                            <div className="citation-body">
-                              <div className="citation-source">{citation.sourceTitle}</div>
-                              <div className="citation-meta">Wikipedia</div>
-                              <p className="citation-excerpt">{citation.excerpt}</p>
-                            </div>
-                            <div className="citation-badge">[{citation.id}]</div>
-                          </div>
-                        ))}
+                    {entry.role === 'assistant' && entry.meta ? (
+                      <div className="meta-row">
+                        {entry.meta.intent ? <span>{entry.meta.intent}</span> : null}
+                        {typeof entry.meta.usedContext === 'boolean' ? (
+                          <span>{entry.meta.usedContext ? 'grounded' : 'general knowledge'}</span>
+                        ) : null}
                       </div>
-                    </div>
-                  ) : null}
-                </div>
-              </article>
-            ))
-          )}
+                    ) : null}
+                  </div>
+                </article>
+              ))
+            )}
 
-          {isSending ? <div className="thinking">Typing...</div> : null}
+            {isSending ? <div className="thinking">Typing...</div> : null}
+          </div>
+
+          {/* Sources panel - right side, only after first citation received */}
+          {hasAnyCitations && (
+            <aside className="sources-panel">
+              <div className="sources-header">
+                <span className="label">Sources</span>
+              </div>
+              {selectedCitations.length === 0 ? (
+                <p className="sources-empty">No sources for this response.</p>
+              ) : (
+                <div className="citation-list">
+                  {selectedCitations.map((citation) => (
+                    <div key={citation.id} className="citation-item">
+                      <div className="citation-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" focusable="false" role="img" aria-label="Wikipedia">
+                          <circle cx="12" cy="12" r="10" />
+                          <text x="12" y="16" textAnchor="middle">W</text>
+                        </svg>
+                      </div>
+                      <div className="citation-body">
+                        <div className="citation-source">{citation.sourceTitle}</div>
+                        <div className="citation-meta">Wikipedia</div>
+                        <p className="citation-excerpt">{citation.excerpt}</p>
+                      </div>
+                      <div className="citation-badge">[{citation.id}]</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </aside>
+          )}
         </div>
 
         <form className="composer" onSubmit={handleSubmit}>
-          <label className="composer-label" htmlFor="message">
-            Message
-          </label>
+          <label className="composer-label" htmlFor="message">Message</label>
           <div className="composer-row">
             <textarea
               id="message"
               value={message}
-              onChange={(event) => setMessage(event.target.value)}
-              placeholder="Ask about a country, try a follow-up, or compare entities..."
+              onChange={(e) => setMessage(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder="Ask about a country… Press Enter to send, Shift+Enter for new line"
               rows={3}
               disabled={isSending}
             />

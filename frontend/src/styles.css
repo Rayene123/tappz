@@ -19,6 +19,7 @@
   --accent: #0f0f0f;
   --panel: #ffffff;
   --shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+  --sidebar-width: 260px;
 }
 
 * {
@@ -41,13 +42,32 @@ textarea {
   min-height: 100vh;
 }
 
+/* ── Layout ── */
 .app-shell {
-  display: grid;
-  grid-template-columns: 260px 1fr;
+  display: flex;
   min-height: 100vh;
+  position: relative;
 }
 
+/* Invisible 12px strip at the left edge that triggers sidebar */
+.sidebar-trigger {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 12px;
+  height: 100vh;
+  z-index: 200;
+  pointer-events: all;
+}
+
+/* ── Sidebar ── */
 .sidebar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  height: 100vh;
+  width: var(--sidebar-width);
+  z-index: 150;
   display: flex;
   flex-direction: column;
   gap: 1.25rem;
@@ -55,6 +75,16 @@ textarea {
   background: var(--surface);
   color: var(--ink);
   border-right: 1px solid var(--border);
+  box-shadow: 2px 0 12px rgba(0,0,0,0.08);
+
+  /* Hidden by default — translate fully off screen */
+  transform: translateX(-100%);
+  transition: transform 220ms cubic-bezier(0.4, 0, 0.2, 1);
+  will-change: transform;
+}
+
+.sidebar.sidebar-open {
+  transform: translateX(0);
 }
 
 .brand-block h1,
@@ -70,14 +100,16 @@ textarea {
 .bubble-content,
 .citation-excerpt,
 .error-banner,
-.history-empty {
+.history-empty,
+.sources-empty {
   margin: 0;
 }
 
 .eyebrow,
 .label,
 .bubble-role,
-.citation-title {
+.citation-title,
+.sources-header .label {
   text-transform: uppercase;
   letter-spacing: 0.14em;
   font-size: 0.72rem;
@@ -178,9 +210,11 @@ textarea {
   word-break: break-word;
 }
 
+/* ── Main chat panel ── */
 .chat-panel {
   display: flex;
   flex-direction: column;
+  flex: 1;
   min-width: 0;
   background: var(--panel);
 }
@@ -190,6 +224,14 @@ textarea {
   border-bottom: 1px solid var(--border);
 }
 
+/* ── Chat body: log + sources side by side ── */
+.chat-body {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+  overflow: hidden;
+}
+
 .chat-log {
   flex: 1;
   overflow-y: auto;
@@ -197,8 +239,33 @@ textarea {
   display: flex;
   flex-direction: column;
   gap: 1.25rem;
+  min-width: 0;
 }
 
+/* ── Sources panel ── */
+.sources-panel {
+  width: 360px;
+  flex-shrink: 0;
+  border-left: 1px solid var(--border);
+  background: var(--surface);
+  overflow-y: auto;
+  padding: 1.25rem 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.sources-header {
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.sources-empty {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+/* ── Empty state ── */
 .empty-state {
   margin: 2rem auto;
   max-width: 720px;
@@ -208,26 +275,37 @@ textarea {
   border: 1px solid var(--border);
 }
 
+/* ── Messages ── */
 .message {
   width: 100%;
   margin: 0 auto;
 }
 
 .message-inner {
-  max-width: 880px;
+  max-width: 760px;
   margin: 0 auto;
   padding: 0.2rem 0;
 }
 
+/* User messages: pushed to the right, no bubble */
+.message-user {
+  display: flex;
+  justify-content: flex-end;
+}
+
 .message-user .message-inner {
-  background: #f7f7f8;
-  border: 1px solid var(--border);
-  border-radius: 0.9rem;
-  padding: 0.85rem 1rem;
-  width: fit-content;
-  max-width: 880px;
+  background: transparent;
+  border: none;
+  padding: 0;
+  max-width: 640px;
   margin-left: auto;
   margin-right: 0;
+  text-align: right;
+}
+
+.message-user .message-role {
+  display: block;
+  text-align: right;
 }
 
 .message-assistant .message-inner {
@@ -274,12 +352,7 @@ textarea {
   background: var(--surface-strong);
 }
 
-.citations {
-  margin-top: 0.95rem;
-  display: grid;
-  gap: 0.6rem;
-}
-
+/* Citations inside sources panel */
 .citation-list {
   display: grid;
   gap: 0.6rem;
@@ -288,8 +361,8 @@ textarea {
 .citation-item {
   display: grid;
   grid-template-columns: auto 1fr auto;
-  gap: 0.9rem;
-  padding: 0.8rem;
+  gap: 0.75rem;
+  padding: 0.75rem;
   border-radius: 0.9rem;
   background: #ffffff;
   border: 1px solid var(--border);
@@ -297,19 +370,20 @@ textarea {
 }
 
 .citation-icon {
-  width: 38px;
-  height: 38px;
+  width: 32px;
+  height: 32px;
   border-radius: 999px;
   border: 1px solid var(--border);
   background: #f7f7f8;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
 }
 
 .citation-icon svg {
-  width: 22px;
-  height: 22px;
+  width: 20px;
+  height: 20px;
   fill: #111111;
 }
 
@@ -322,28 +396,32 @@ textarea {
 
 .citation-badge {
   align-self: start;
-  padding: 0.2rem 0.45rem;
+  padding: 0.2rem 0.4rem;
   border-radius: 999px;
   background: var(--surface);
   border: 1px solid var(--border);
   font-weight: 600;
   font-size: 0.72rem;
   color: var(--muted);
+  flex-shrink: 0;
 }
 
 .citation-source {
   font-weight: 700;
-  margin-bottom: 0.25rem;
+  margin-bottom: 0.2rem;
+  font-size: 0.88rem;
 }
 
 .citation-meta {
-  font-size: 0.78rem;
+  font-size: 0.75rem;
   color: var(--muted);
-  margin-bottom: 0.4rem;
+  margin-bottom: 0.35rem;
 }
 
 .citation-excerpt {
   color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.45;
 }
 
 .thinking {
@@ -354,6 +432,7 @@ textarea {
   color: var(--muted);
 }
 
+/* ── Composer ── */
 .composer {
   padding: 1rem 1.75rem 1.5rem;
   background: #ffffff;
@@ -382,13 +461,14 @@ textarea {
 .composer textarea {
   flex: 1;
   resize: vertical;
-  min-height: 90px;
+  min-height: 60px;
   padding: 0.65rem 0.4rem;
   border-radius: 0.65rem;
   border: none;
   background: transparent;
   color: var(--ink);
   font-size: 0.96rem;
+  outline: none;
 }
 
 .composer button {
@@ -415,19 +495,33 @@ textarea {
   font-weight: 600;
 }
 
+/* ── Responsive ── */
+@media (max-width: 1100px) {
+  .sources-panel {
+    width: 280px;
+  }
+}
+
 @media (max-width: 980px) {
-  .app-shell {
-    grid-template-columns: 1fr;
+  .sources-panel {
+    width: 220px;
+  }
+}
+
+@media (max-width: 768px) {
+  .chat-body {
+    flex-direction: column;
   }
 
-  .sidebar {
-    border-right: none;
-    border-bottom: 1px solid var(--border);
+  .sources-panel {
+    width: 100%;
+    border-left: none;
+    border-top: 1px solid var(--border);
+    max-height: 260px;
   }
 }
 
 @media (max-width: 640px) {
-  .sidebar,
   .chat-header,
   .chat-log,
   .composer {
